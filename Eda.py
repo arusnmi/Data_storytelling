@@ -5,7 +5,7 @@ import seaborn as sns
 sns.set(style="whitegrid")
 
 # load cleaned data file (produced by DATA CLEANING.py)
-INPUT = "AB_US_2023_cleaned.csv"
+INPUT = "AB_US_2023_filtered.csv"
 
 def main():
     df = pd.read_csv(INPUT)

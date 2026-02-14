@@ -7,53 +7,34 @@ nalessdf = df.dropna(subset=['host_name', 'name'], inplace=False)
 
 dupelessdf = nalessdf.drop_duplicates(subset=['id', 'host_id'], inplace=False)
 
-# numeric columns to inspect
-numeric_cols = ['latitude', 'longitude', 'price', 'minimum_nights',
-                'number_of_reviews', 'reviews_per_month',
-                'calculated_host_listings_count', 'availability_365',
-                'number_of_reviews_ltm']
+# after dropping nulls & duplicates, explore numeric columns
+numeric = dupelessdf.select_dtypes(include='number')
 
-# drop rows with obviously incorrect values (e.g. negative prices or lat/lon outside valid range)
-condition = (
-    (dupelessdf['price'] >= 0) &
-    (dupelessdf['latitude'].between(-90, 90)) &
-    (dupelessdf['longitude'].between(-180, 180))
-)
-cleaned = dupelessdf[condition].copy()
+# compute bounds based on percentiles and filter out extreme values
+bounds = {}
+for col in numeric.columns:
+    low = numeric[col].quantile(0.01)
+    high = numeric[col].quantile(0.99)
+    bounds[col] = (low, high)
 
-# compute medians and normalize numeric columns
-medians = cleaned[numeric_cols].median()
+mask = pd.Series(True, index=numeric.index)
+for col, (low, high) in bounds.items():
+    mask &= numeric[col].between(low, high)
 
-# store medians for later use if needed
-print("Column medians:\n", medians)
+filtered_df = dupelessdf[mask].copy()
 
-# normalize by subtracting median then dividing by IQR to reduce effect of outliers
-iqr = cleaned[numeric_cols].quantile(0.75) - cleaned[numeric_cols].quantile(0.25)
-normalized = (cleaned[numeric_cols] - medians) / iqr.replace(0, 1)
+# recompute numeric subset after filtering
+numeric = filtered_df.select_dtypes(include='number')
 
-# attach normalized columns back to dataframe with suffix
-for col in numeric_cols:
-    cleaned[f"{col}_norm"] = normalized[col]
+# descriptive statistics on filtered data
+stats = numeric.agg(['mean', 'median', 'min', 'max', 'std'])
+print("Numeric column statistics (filtered):")
+print(stats)
 
-# identify and drop extreme outliers based on normalized values
-# threshold = 10% of the maximum normalized value for each column
-max_norm = normalized.abs().max()
-thresholds = 0.1 * max_norm
-
-# build boolean mask for rows that are within thresholds for all cols
-mask = pd.Series(True, index=cleaned.index)
-for col in numeric_cols:
-    mask &= cleaned[f"{col}_norm"].abs() <= thresholds[col]
-
-filtered = cleaned[mask].copy()
-
-# final dataset
-final_df = filtered
-
-# save cleaned data to a new CSV file
-output_path = 'AB_US_2023_cleaned.csv'
-final_df.to_csv(output_path, index=False)
-print(f"Cleaned data written to {output_path} (rows: {len(final_df)})")
+# optionally save the filtered dataset
+filtered_df.to_csv('AB_US_2023_filtered.csv', index=False)
+print("Filtered dataset saved as AB_US_2023_filtered.csv")
+print("Visualizations saved. End of script.")
 
 
 
